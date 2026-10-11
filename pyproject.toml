@@ -133,6 +133,9 @@ msgspec = [
 version_file = "src/msgspec/_version.py"
 parentdir_prefix_version = "msgspec-"
 
+[tool.uv.sources]
+msgspec-pcre2 = { path = "pcre2" }
+
 [tool.uv.config-settings]
 editable_mode = "compat"
 
