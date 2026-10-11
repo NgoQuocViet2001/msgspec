@@ -325,6 +325,18 @@ fast_long_extract_parts(PyObject *vv, bool *neg, uint64_t *scale) {
 #define MS_SET_FIRST_SLOT(obj, val) \
     MS_GET_FIRST_SLOT(obj) = (val)
 
+#define MS_MAX_DICT_SIZE 1024
+
+static inline PyObject*
+ms_presized_dict(Py_ssize_t size) {
+    // When parsing objects with known size, we pre-allocate the dict
+    // to be able to store the needed amount of data.
+    // But, since it is possible to ask for a very big dict, we also limit
+    // the upper bound as well, so it can grow normally for big objects.
+    // Which is still faster for both small and big objects.
+    return _PyDict_NewPresized(Py_MIN(size, MS_MAX_DICT_SIZE));
+}
+
 
 /*************************************************************************
  * Lookup Tables                                                         *
@@ -7288,7 +7300,7 @@ StructMeta_signature(StructMetaObject *self, void *closure)
 
     temp_args = PyTuple_New(0);
     if (temp_args == NULL) goto cleanup;
-    temp_kwargs = PyDict_New();
+    temp_kwargs = ms_presized_dict(4);
     if (temp_kwargs == NULL) goto cleanup;
 
     for (i = 0; i < nfields; i++) {
@@ -8340,7 +8352,7 @@ struct_asdict(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *fields = struct_type->struct_fields;
     Py_ssize_t nfields = PyTuple_GET_SIZE(fields);
 
-    PyObject *out = PyDict_New();
+    PyObject *out = ms_presized_dict(nfields);
     if (out == NULL) return NULL;
 
     for (Py_ssize_t i = 0; i < nfields; i++) {
@@ -8470,7 +8482,7 @@ Struct_reduce(PyObject *self, PyObject *args)
 
     if (st_type->nkwonly) {
         MsgspecState *mod = msgspec_get_global_state();
-        values = PyDict_New();
+        values = ms_presized_dict(nfields);
         if (values == NULL) return NULL;
         for (Py_ssize_t i = 0; i < nfields; i++) {
             PyObject *field = PyTuple_GET_ITEM(st_type->struct_fields, i);
@@ -16348,7 +16360,7 @@ mpack_decode_dict(
     PathNode key_path = {path, PATH_KEY, NULL};
     PathNode val_path = {path, PATH_ELLIPSIS, NULL};
 
-    res = PyDict_New();
+    res = ms_presized_dict(size);
     if (res == NULL) return NULL;
     if (size == 0) return res;
 
@@ -16404,7 +16416,7 @@ mpack_decode_typeddict(
 ) {
     if (Py_EnterRecursiveCall(" while deserializing an object")) return NULL;
 
-    PyObject *res = PyDict_New();
+    PyObject *res = ms_presized_dict(size);
     if (res == NULL) goto error;
 
     TypedDictInfo *info = TypeNode_get_typeddict_info(type);
@@ -18911,7 +18923,7 @@ json_decode_typeddict(
 
     if (Py_EnterRecursiveCall(" while deserializing an object")) return NULL;
 
-    out = PyDict_New();
+    out = ms_presized_dict(info->nrequired);
     if (out == NULL) goto error;
 
     while (true) {
@@ -20339,7 +20351,7 @@ static void
 sort_dict_inplace(PyObject **dict) {
     PyObject *out = NULL, *new = NULL, *keys = NULL;
 
-    new = PyDict_New();
+    new = ms_presized_dict(PyDict_Size(*dict));
     if (new == NULL) goto error;
 
     keys = PyDict_Keys(*dict);
@@ -20368,8 +20380,10 @@ to_builtins_dict(ToBuiltinsState *self, PyObject *obj) {
 
     PyObject *new_key = NULL, *new_val = NULL, *key, *val;
     bool ok = false;
-    PyObject *out = PyDict_New();
+    PyObject *out = NULL;
+
     Py_BEGIN_CRITICAL_SECTION(obj);
+    out = ms_presized_dict(PyDict_Size(obj));
     if (out == NULL) goto cleanup;
 
     Py_ssize_t pos = 0;
@@ -20406,7 +20420,9 @@ cleanup:;
     Py_END_CRITICAL_SECTION();
     Py_LeaveRecursiveCall();
     if (!ok) {
-        Py_CLEAR(out);
+        if (out) {
+            Py_CLEAR(out);
+        }
         Py_XDECREF(new_key);
         Py_XDECREF(new_val);
     }
@@ -20473,7 +20489,7 @@ to_builtins_struct(ToBuiltinsState *self, PyObject *obj, bool is_key) {
         }
     }
     else {
-        out = PyDict_New();
+        out = ms_presized_dict(nfields);
         if (out == NULL) goto cleanup;
         if (tag_value != NULL) {
             if (PyDict_SetItem(out, tag_field, tag_value) < 0) goto cleanup;
@@ -20519,7 +20535,7 @@ to_builtins_dataclass(ToBuiltinsState *self, PyObject *obj, PyObject *fields)
     DataclassIter iter;
     if (!dataclass_iter_setup(&iter, obj, fields)) goto cleanup;
 
-    out = PyDict_New();
+    out = ms_presized_dict(PyDict_GET_SIZE(fields));
     if (out == NULL) goto cleanup;
 
     PyObject *field, *val;
@@ -21860,10 +21876,11 @@ convert_dict_to_dict(
 
     PathNode key_path = {path, PATH_KEY, NULL};
     PathNode val_path = {path, PATH_ELLIPSIS, NULL};
+    Py_ssize_t dict_size = PyDict_GET_SIZE(obj);
 
-    PyObject *out = PyDict_New();
+    PyObject *out = ms_presized_dict(dict_size);
     if (out == NULL) return NULL;
-    if (PyDict_GET_SIZE(obj) == 0) return out;
+    if (dict_size == 0) return out;
 
     if (Py_EnterRecursiveCall(" while deserializing an object")) {
         Py_DECREF(out);
@@ -22017,11 +22034,12 @@ convert_dict_to_typeddict(
 ) {
     if (Py_EnterRecursiveCall(" while deserializing an object")) return NULL;
 
-    PyObject *out = PyDict_New();
-    if (out == NULL) goto error;
-
     TypedDictInfo *info = TypeNode_get_typeddict_info(type);
     Py_ssize_t nrequired = 0, pos = 0, pos_obj = 0;
+
+    PyObject *out = ms_presized_dict(info->nrequired);
+    if (out == NULL) goto error;
+
     PyObject *key_obj, *val_obj;
     while (PyDict_Next(obj, &pos_obj, &key_obj, &val_obj)) {
         if (!convert_is_str_key(key_obj, path)) goto error;
