@@ -7300,7 +7300,7 @@ StructMeta_signature(StructMetaObject *self, void *closure)
 
     temp_args = PyTuple_New(0);
     if (temp_args == NULL) goto cleanup;
-    temp_kwargs = ms_presized_dict(4);
+    temp_kwargs = PyDict_New();
     if (temp_kwargs == NULL) goto cleanup;
 
     for (i = 0; i < nfields; i++) {
@@ -18923,8 +18923,8 @@ json_decode_typeddict(
 
     if (Py_EnterRecursiveCall(" while deserializing an object")) return NULL;
 
-    /* The number of keys in the message isn't known yet; presize for all
-     * fields of the TypedDict (not only the required ones). */
+    // The number of keys in the message isn't known yet; presize for all
+    // fields of the TypedDict (not only the required ones).
     out = ms_presized_dict(Py_SIZE(info));
     if (out == NULL) goto error;
 
@@ -20491,9 +20491,9 @@ to_builtins_struct(ToBuiltinsState *self, PyObject *obj, bool is_key) {
         }
     }
     else {
-        /* With omit_defaults only the fields without a default are
-         * guaranteed to be emitted; presizing for all of them would waste
-         * a larger table when most fields get omitted. */
+        // With omit_defaults only the fields without a default are
+        // guaranteed to be emitted; presizing for all of them would waste
+        // a larger table when most fields get omitted.
         Py_ssize_t expected = (omit_defaults ? npos : nfields) + (tag_value != NULL);
         out = ms_presized_dict(expected);
         if (out == NULL) goto cleanup;
@@ -22043,8 +22043,8 @@ convert_dict_to_typeddict(
     TypedDictInfo *info = TypeNode_get_typeddict_info(type);
     Py_ssize_t nrequired = 0, pos = 0, pos_obj = 0;
 
-    /* Unknown keys are dropped, so the output has at most
-     * min(len(obj), number of fields) entries. */
+    // Unknown keys are dropped, so the output has at most
+    // min(len(obj), number_of_fields) entries.
     PyObject *out = ms_presized_dict(
         Py_MIN(PyDict_GET_SIZE(obj), Py_SIZE(info))
     );
