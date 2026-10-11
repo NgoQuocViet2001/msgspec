@@ -18923,7 +18923,9 @@ json_decode_typeddict(
 
     if (Py_EnterRecursiveCall(" while deserializing an object")) return NULL;
 
-    out = ms_presized_dict(info->nrequired);
+    /* The number of keys in the message isn't known yet; presize for all
+     * fields of the TypedDict (not only the required ones). */
+    out = ms_presized_dict(Py_SIZE(info));
     if (out == NULL) goto error;
 
     while (true) {
@@ -20489,7 +20491,11 @@ to_builtins_struct(ToBuiltinsState *self, PyObject *obj, bool is_key) {
         }
     }
     else {
-        out = ms_presized_dict(nfields);
+        /* With omit_defaults only the fields without a default are
+         * guaranteed to be emitted; presizing for all of them would waste
+         * a larger table when most fields get omitted. */
+        Py_ssize_t expected = (omit_defaults ? npos : nfields) + (tag_value != NULL);
+        out = ms_presized_dict(expected);
         if (out == NULL) goto cleanup;
         if (tag_value != NULL) {
             if (PyDict_SetItem(out, tag_field, tag_value) < 0) goto cleanup;
@@ -22037,7 +22043,11 @@ convert_dict_to_typeddict(
     TypedDictInfo *info = TypeNode_get_typeddict_info(type);
     Py_ssize_t nrequired = 0, pos = 0, pos_obj = 0;
 
-    PyObject *out = ms_presized_dict(info->nrequired);
+    /* Unknown keys are dropped, so the output has at most
+     * min(len(obj), number of fields) entries. */
+    PyObject *out = ms_presized_dict(
+        Py_MIN(PyDict_GET_SIZE(obj), Py_SIZE(info))
+    );
     if (out == NULL) goto error;
 
     PyObject *key_obj, *val_obj;
