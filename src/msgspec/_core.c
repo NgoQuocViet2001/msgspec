@@ -18924,9 +18924,7 @@ json_decode_typeddict(
 
     if (Py_EnterRecursiveCall(" while deserializing an object")) return NULL;
 
-    // The number of keys in the message isn't known yet; presize for all
-    // fields of the TypedDict (not only the required ones).
-    out = ms_presized_dict(Py_SIZE(info));
+    out = PyDict_New();
     if (out == NULL) goto error;
 
     while (true) {
