@@ -1,2 +1,2 @@
 [codespell]
-skip = ./site,./.venv,*.py,*.c,*.h
+skip = ./site,./.venv,*.py,*.c,*.h,./pcre2/vendor/*

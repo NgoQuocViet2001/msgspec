@@ -48,6 +48,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+pcre2 = ["msgspec-pcre2==0.1.0"]
 toml = [
   "tomli ; python_version < '3.11'",
   "tomli_w",

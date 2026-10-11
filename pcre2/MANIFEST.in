@@ -1,0 +1,3 @@
+include _msgspec_pcre2.c pattern_api.h
+recursive-include vendor/pcre2 *.c *.h *.generic
+include vendor/pcre2/LICENCE.md vendor/pcre2/COPYING vendor/pcre2/deps/sljit/LICENSE

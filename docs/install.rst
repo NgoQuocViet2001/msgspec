@@ -17,6 +17,31 @@ is required. The basic install has no required dependencies.
     conda install msgspec -c conda-forge
 
 
+.. _install-without-pcre2:
+
+Optional PCRE2 acceleration
+---------------------------
+
+The basic ``msgspec`` wheel and source distribution contain no PCRE2 code.
+For optional pattern acceleration, install the separate native backend::
+
+    python -m pip install "msgspec[pcre2]"
+
+This extra adds ``msgspec-pcre2``, which owns a separate extension and bundles
+PCRE2 sources and licenses. No system PCRE2 library is required. Ready wheels
+need no compiler; where a compatible wheel is unavailable, building from source
+requires a C compiler and Python development headers.
+
+Without the backend, all patterns use Python ``re``. With it, compatible
+patterns are accelerated automatically, preserving Python ``re`` semantics.
+A broken or incompatible backend raises an error instead of silently disabling
+acceleration.
+
+To remove an existing backend, uninstall ``msgspec-pcre2``. Restart Python after
+adding or removing the backend. Already created matchers retain their original
+engine for their lifetime.
+
+
 Optional Dependencies
 ---------------------
 
