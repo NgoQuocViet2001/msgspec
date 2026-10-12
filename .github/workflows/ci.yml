@@ -168,7 +168,7 @@ jobs:
     # TODO: enable threading sanitizer
     - name: Run tests
       run: >-
-        just env-run test pytest tests/unit -s
+        just env-run test pytest tests/unit tests/freethreading -s
 
   upload-coverage:
     name: Upload coverage files to Codecov
