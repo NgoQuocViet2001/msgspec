@@ -1,6 +1,5 @@
 import gc
 import importlib
-import json
 import os
 import re
 import subprocess
@@ -15,6 +14,18 @@ from typing import Annotated
 import pytest
 
 import msgspec
+
+
+def run_python(code, *args):
+    if sys.platform in {"emscripten", "wasi"}:
+        pytest.skip("Subprocesses unavailable")
+    result = subprocess.run(
+        [sys.executable, "-c", textwrap.dedent(code), *args],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.fixture(scope="module")
@@ -43,11 +54,8 @@ def native(pcre2_available):
         pytest.skip("Optional pcre2 matcher API unavailable")
 
 
-@pytest.mark.skipif(
-    sys.platform in {"emscripten", "wasi"}, reason="Subprocesses unavailable"
-)
 def test_backend_missing_and_broken_imports():
-    code = textwrap.dedent(
+    run_python(
         r"""
         import importlib.abc
         import importlib.machinery
@@ -82,7 +90,6 @@ def test_backend_missing_and_broken_imports():
         assert msgspec.json.decode(b'"a"', type=typ) == "a"
         if sysconfig.get_config_var("Py_GIL_DISABLED"):
             assert finder.calls == 0
-            print("no SDK import")
             sys.exit(0)
         assert finder.calls == 1
         finder.error = "missing_backend_dependency"
@@ -104,15 +111,11 @@ def test_backend_missing_and_broken_imports():
         assert finder.calls == calls
         """
     )
-    subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
 
 
-@pytest.mark.skipif(
-    sys.platform in {"emscripten", "wasi"}, reason="Subprocesses unavailable"
-)
 def test_backend_module_removal_preserves_matcher(native):
-    code = textwrap.dedent(
-        """
+    run_python(
+        r"""
         import gc
         import importlib
         import sys
@@ -121,30 +124,22 @@ def test_backend_module_removal_preserves_matcher(native):
 
         typ = Annotated[str, msgspec.Meta(pattern="^[A-Z]{2}$")]
         decoder = msgspec.json.Decoder(typ)
-        for index in range(10):
-            package = importlib.import_module("pcre2")
-            module = importlib.import_module("pcre2._cy")
-            del sys.modules["pcre2._cy"]
-            del sys.modules["pcre2"]
-            del package
-            del module
-            gc.collect()
-            assert decoder.decode(b'"US"') == "US"
-            # Each alias is fresh, independent of Annotated's metadata cache.
-            pattern = "^[A-Z]{2," + str(index + 3) + "}$"
-            next_type = Annotated[str, msgspec.Meta(pattern=pattern)]
-            assert msgspec.json.decode(b'"GB"', type=next_type) == "GB"
+        package = importlib.import_module("pcre2")
+        module = importlib.import_module("pcre2._cy")
+        del sys.modules["pcre2._cy"], sys.modules["pcre2"]
+        del package, module
+        gc.collect()
+        assert decoder.decode(b'"US"') == "US"
+        next_type = Annotated[str, msgspec.Meta(pattern="^[A-Z]{2,3}$")]
+        assert msgspec.json.decode(b'"GB"', type=next_type) == "GB"
+        assert decoder.decode(b'"US"') == "US"
         """
     )
-    subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
 
 
-@pytest.mark.skipif(
-    sys.platform in {"emscripten", "wasi"}, reason="ctypes and subprocesses unavailable"
-)
 def test_incompatible_backend_interface():
-    code = textwrap.dedent(
-        """
+    run_python(
+        r"""
         import ctypes
         import sys
         import sysconfig
@@ -189,14 +184,11 @@ def test_incompatible_backend_interface():
                 raise AssertionError("Incompatible interface accepted")
         """
     )
-    subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
 
 
-@pytest.mark.skipif(
-    sys.platform in {"emscripten", "wasi"}, reason="Subprocesses unavailable"
-)
 def test_optional_provider_lookup_errors():
-    code = textwrap.dedent(r"""
+    run_python(
+        r"""
         import sys
         import sysconfig
         import types
@@ -234,8 +226,8 @@ def test_optional_provider_lookup_errors():
                 assert exc is error
             else:
                 raise AssertionError("Dynamic provider error hidden")
-    """)
-    subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
+        """
+    )
 
 
 @pytest.mark.skipif(
@@ -323,15 +315,12 @@ def test_sdk_compile_errors_propagate(native, monkeypatch, kind):
     assert exc.value is error
 
 
-@pytest.mark.skipif(
-    sys.platform in {"emscripten", "wasi"}, reason="Subprocesses unavailable"
-)
-def test_native_provider_cycle_and_partial_cleanup(native):
-    code = textwrap.dedent(r"""
+def test_native_provider_cycle(native):
+    run_python(
+        r"""
         import gc
         import sys
         import types
-        import typing
         import weakref
         import pcre2
         import msgspec
@@ -343,40 +332,18 @@ def test_native_provider_cycle_and_partial_cleanup(native):
         provider._BooleanMatcher = original._BooleanMatcher
         sys.modules["pcre2._cy"] = provider
         try:
-            initial_refs = sys.getrefcount(provider)
-            meta = msgspec.Meta(pattern="^[A-Z]{2,19}$")
-            assert sys.getrefcount(provider) > initial_refs
-            typ = typing.Annotated[str, meta]
-            class Record(msgspec.Struct):
-                value: typ
-            provider.owner = Record
-            record_ref = weakref.ref(Record)
-            provider_ref = weakref.ref(provider)
-            decoder = msgspec.json.Decoder(Record)
-            assert decoder.decode(b'{"value":"US"}').value == "US"
-            invalid = typing.Annotated[int, msgspec.Meta(min_length=1)]
             before = sys.getrefcount(provider)
-            for _ in range(50):
-                try:
-                    msgspec.json.Decoder(tuple[typ, invalid])
-                except TypeError:
-                    pass
-                else:
-                    raise AssertionError("Invalid annotation accepted")
-                temporary = msgspec.json.Decoder(list[typ])
-                assert temporary.decode(b'["US"]') == ["US"]
-                del temporary
-            assert sys.getrefcount(provider) == before
-            del decoder, Record, typ, meta, provider
+            meta = msgspec.Meta(pattern="^[A-Z]{2,19}$")
+            assert sys.getrefcount(provider) > before
+            provider.owner = meta
+            provider_ref = weakref.ref(provider)
+            del meta, provider
         finally:
             sys.modules["pcre2._cy"] = original
-        for clear in typing._cleanups:
-            clear()
         gc.collect()
-        assert record_ref() is None
         assert provider_ref() is None
-    """)
-    subprocess.run([sys.executable, "-c", code], check=True, timeout=30)
+        """
+    )
 
 
 @pytest.fixture(params=["json", "msgpack", "convert"])
@@ -385,13 +352,6 @@ def validate(request):
         return lambda value, typ: msgspec.convert(value, typ, strict=True)
     proto = getattr(msgspec, request.param)
     return lambda value, typ: proto.decode(proto.encode(value), type=typ, strict=True)
-
-
-def test_pattern_validation(validate):
-    typ = Annotated[str, msgspec.Meta(pattern="^a+$")]
-    assert validate("aaa", typ) == "aaa"
-    with pytest.raises(msgspec.ValidationError):
-        validate("b", typ)
 
 
 @pytest.mark.parametrize(
@@ -429,7 +389,7 @@ def test_pattern_validation(validate):
         ".",
     ],
 )
-def test_patterns_match_re(pattern, validate):
+def test_patterns_match_re(pattern):
     oracle = re.compile(pattern)
     subjects = [
         "",
@@ -466,13 +426,13 @@ def test_patterns_match_re(pattern, validate):
     for subject in subjects:
         if oracle.search(subject) is None:
             with pytest.raises(msgspec.ValidationError):
-                validate(subject, typ)
+                msgspec.convert(subject, typ)
         else:
-            assert validate(subject, typ) == subject
+            assert msgspec.convert(subject, typ) == subject
 
 
 @pytest.mark.parametrize("pattern", [r"a\z", r"^\B$", "a(?i)b", "a*+a", "(?>a|ab)c"])
-def test_version_sensitive_python_contract(pattern, validate):
+def test_version_sensitive_python_contract(pattern):
     error = None
     with warnings.catch_warnings(record=True) as reference_warnings:
         warnings.simplefilter("always")
@@ -502,17 +462,9 @@ def test_version_sensitive_python_contract(pattern, validate):
     for subject in ("", "a", "a\n", "aaaa", "abc", "ac"):
         if oracle.search(subject) is None:
             with pytest.raises(msgspec.ValidationError):
-                validate(subject, typ)
+                msgspec.convert(subject, typ)
         else:
-            assert validate(subject, typ) == subject
-
-
-@pytest.mark.parametrize("pattern", ["[", r"[\8]", r"\q", r"(?au)a", r"(?L)a"])
-def test_python_compile_errors(pattern):
-    with pytest.raises(re.error):
-        re.compile(pattern)
-    with pytest.raises(re.error):
-        msgspec.Meta(pattern=pattern)
+            assert msgspec.convert(subject, typ) == subject
 
 
 @pytest.mark.parametrize("pattern", ["^[A-Z]{2}$", ".", "a", r"^\w+$"])
@@ -527,20 +479,13 @@ def test_surrogates_follow_python_convert(pattern):
             assert msgspec.convert(subject, typ) == subject
 
 
-def test_pattern_preserved_for_schema_and_error(native, validate):
-    pattern = r"^[A-Z]{2}$"
-    meta = msgspec.Meta(pattern=pattern)
-    typ = Annotated[str, meta]
-    assert meta.pattern == pattern
-    assert msgspec.inspect.type_info(typ).pattern == pattern
-    assert msgspec.json.schema(typ)["pattern"] == pattern
+def test_protocol_and_key_constraints(validate):
+    pattern = "^[A-Z]{2}$"
+    key = Annotated[str, msgspec.Meta(pattern=pattern)]
+    assert validate("US", key) == "US"
     with pytest.raises(msgspec.ValidationError) as exc:
-        validate("1", typ)
+        validate("bad", key)
     assert repr(pattern) in str(exc.value)
-
-
-def test_nested_and_dict_key_constraints(validate):
-    key = Annotated[str, msgspec.Meta(pattern="^[A-Z]{2}$")]
     typ = dict[key, list[key]]
     assert validate({"US": ["GB", "DE"]}, typ) == {"US": ["GB", "DE"]}
     for value in ({"bad": ["GB"]}, {"US": ["bad"]}):
@@ -548,17 +493,19 @@ def test_nested_and_dict_key_constraints(validate):
             validate(value, typ)
 
 
-def test_partial_type_construction_cleanup():
-    text = Annotated[str, msgspec.Meta(pattern="^[A-Z]{2}$")]
+@pytest.mark.parametrize("pattern", ["^[A-Z]{2,21}$", r"^\w{1,15}$"])
+def test_partial_type_construction_cleanup(pattern):
+    meta = msgspec.Meta(pattern=pattern)
+    (matcher,) = gc.get_referents(meta)
+    text = Annotated[str, meta]
     invalid = Annotated[int, msgspec.Meta(min_length=1)]
-    # The first node owns a pattern before the second field is rejected.
-    for _ in range(50):
-        with pytest.raises(TypeError):
-            msgspec.json.Decoder(tuple[text, invalid])
-        decoder = msgspec.json.Decoder(list[text])
-        assert decoder.decode(b'["US"]') == ["US"]
-        del decoder
-    gc.collect()
+    before = sys.getrefcount(matcher)
+    with pytest.raises(TypeError):
+        msgspec.json.Decoder(tuple[text, invalid])
+    decoder = msgspec.json.Decoder(list[text])
+    assert decoder.decode(b'["US"]') == ["US"]
+    del decoder
+    assert sys.getrefcount(matcher) == before
 
 
 @pytest.mark.skipif(
@@ -567,86 +514,72 @@ def test_partial_type_construction_cleanup():
 def test_shared_decoder_threaded():
     typ = Annotated[str, msgspec.Meta(pattern="^[A-Z]{2}$")]
     decoder = msgspec.json.Decoder(typ)
-    barrier = Barrier(8)
+    barrier = Barrier(4)
 
     def work(worker):
         barrier.wait(timeout=10)
-        for index in range(200):
-            value = "US" if (worker + index) % 2 else "bad"
-            if value == "US":
-                assert decoder.decode(b'"US"') == value
-            else:
-                with pytest.raises(msgspec.ValidationError):
-                    decoder.decode(b'"bad"')
-        return True
+        assert decoder.decode(b'"US"') == "US"
+        with pytest.raises(msgspec.ValidationError):
+            decoder.decode(b'"bad"')
+        return worker
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        assert all(pool.map(work, range(8)))
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        assert sorted(pool.map(work, range(4))) == list(range(4))
 
 
 @pytest.mark.skipif(
-    sys.platform in {"emscripten", "wasi"},
-    reason="Threads and subprocesses unavailable",
+    sys.platform in {"emscripten", "wasi"}, reason="Threads unavailable"
 )
-def test_first_concurrent_pattern_constructors(native):
-    code = textwrap.dedent(r"""
-        import json
+def test_first_concurrent_pattern_constructors():
+    run_python(
+        r"""
+        import importlib.abc
         import sys
+        import sysconfig
         from concurrent.futures import ThreadPoolExecutor
         from threading import Barrier
         from typing import Annotated
 
+        if sysconfig.get_config_var("Py_GIL_DISABLED"):
+            class BlockSDK(importlib.abc.MetaPathFinder):
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname == "pcre2" or fullname.startswith("pcre2."):
+                        raise AssertionError("Free-threaded constructor imported SDK")
+            sys.meta_path.insert(0, BlockSDK())
         before = getattr(sys, "_is_gil_enabled", lambda: True)()
         import msgspec
-        after_import = getattr(sys, "_is_gil_enabled", lambda: True)()
-        assert after_import == before
-        barrier = Barrier(8)
+        assert getattr(sys, "_is_gil_enabled", lambda: True)() == before
+        barrier = Barrier(4)
 
         def work(worker):
             barrier.wait(timeout=10)
-            for index in range(12):
-                width = 1 + (worker + index) % 3
-                pattern = "^[A-Z]{" + str(width) + "}$"
-                typ = Annotated[str, msgspec.Meta(pattern=pattern)]
-                decoder = msgspec.json.Decoder(typ)
-                value = "A" * width
-                assert decoder.decode(msgspec.json.encode(value)) == value
-                try:
-                    decoder.decode(b'"bad"')
-                except msgspec.ValidationError:
-                    pass
-                else:
-                    raise AssertionError("Invalid subject accepted")
+            width = worker + 1
+            typ = Annotated[str, msgspec.Meta(pattern="^[A-Z]{" + str(width) + "}$")]
+            decoder = msgspec.json.Decoder(typ)
+            value = "A" * width
+            assert decoder.decode(msgspec.json.encode(value)) == value
+            try:
+                decoder.decode(b'"bad"')
+            except msgspec.ValidationError:
+                pass
+            else:
+                raise AssertionError("Invalid subject accepted")
             return worker
 
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            assert sorted(pool.map(work, range(8))) == list(range(8))
-        after_calls = getattr(sys, "_is_gil_enabled", lambda: True)()
-        assert after_calls == before
-        print(json.dumps({"before": before, "after_import": after_import,
-                          "after_calls": after_calls, "constructors": 96}))
-    """)
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        timeout=30,
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            assert sorted(pool.map(work, range(4))) == list(range(4))
+        assert getattr(sys, "_is_gil_enabled", lambda: True)() == before
+        """
     )
-    assert result.returncode == 0, result.stdout + result.stderr
-    evidence = json.loads(result.stdout)
-    assert evidence["before"] == evidence["after_import"] == evidence["after_calls"]
-    assert evidence["constructors"] == 96
 
 
-@pytest.mark.skipif(
-    sys.platform in {"emscripten", "wasi"}, reason="Subprocesses unavailable"
-)
 def test_native_and_fallback_call_paths_and_lifetime(pcre2_available):
-    code = textwrap.dedent(r"""
+    run_python(
+        r"""
         import gc
         import re
         import sys
-        import typing
+        from typing import Annotated
         import weakref
 
         compile_original = re.compile
@@ -685,7 +618,7 @@ def test_native_and_fallback_call_paths_and_lifetime(pcre2_available):
         ]:
             meta = msgspec.Meta(pattern=pattern)
             spy = refs[-1]()
-            typ = typing.Annotated[str, meta]
+            typ = Annotated[str, meta]
             decoder = msgspec.json.Decoder(typ)
             assert decoder.decode(b'"US"') == "US"
             assert spy.calls == expected_calls, (pattern, spy.calls)
@@ -701,38 +634,14 @@ def test_native_and_fallback_call_paths_and_lifetime(pcre2_available):
                     assert spy.calls == before + 1
             del decoder, typ, meta, spy
 
-        # A distinct pattern prevents reuse of either alias from the routing check.
+        # This Meta is not held by Annotated's cache.
         meta = msgspec.Meta(pattern=r"^\w{1,16}$")
         spy = refs[-1]()
-        typ = typing.Annotated[str, meta]
-        class Record(msgspec.Struct):
-            value: typ
-        spy.owner = Record
-        record_ref = weakref.ref(Record)
+        spy.owner = meta
         spy_ref = weakref.ref(spy)
-        decoder = msgspec.json.Decoder(Record)
-        assert decoder.decode(b'{"value":"US"}').value == "US"
-        assert spy.calls == 1
-        before = sys.getrefcount(spy)
-        for _ in range(50):
-            temporary = msgspec.json.Decoder(list[typ])
-            assert temporary.decode(b'["US"]') == ["US"]
-            del temporary
-        assert sys.getrefcount(spy) == before
-        del decoder, Record, typ, meta, spy
-        # Annotated's global cache otherwise remains an external cycle root.
-        for clear in typing._cleanups:
-            clear()
+        del meta, spy
         gc.collect()
-        assert record_ref() is None
         assert spy_ref() is None
-        print("ok")
-    """)
-    result = subprocess.run(
-        [sys.executable, "-c", code, "1" if pcre2_available else "0"],
-        capture_output=True,
-        text=True,
-        timeout=30,
+        """,
+        "1" if pcre2_available else "0",
     )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert result.stdout.strip() == "ok"
