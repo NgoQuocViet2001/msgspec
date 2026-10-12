@@ -23,23 +23,23 @@ Optional PCRE2 acceleration
 ---------------------------
 
 The basic ``msgspec`` wheel and source distribution contain no PCRE2 code.
-For optional pattern acceleration, install the separate native backend::
+The optional extra installs the external `pcre2 package`_::
 
     python -m pip install "msgspec[pcre2]"
 
-This extra adds ``msgspec-pcre2``, which owns a separate extension and bundles
-PCRE2 sources and licenses. No system PCRE2 library is required. Ready wheels
-need no compiler; where a compatible wheel is unavailable, building from source
-requires a C compiler and Python development headers.
+Acceleration requires a compatible versioned C API in that package. This API
+is proposed and is not present in the published pcre2 0.7.1 release. Installing
+that release therefore preserves Python ``re`` matching without acceleration.
 
-Without the backend, all patterns use Python ``re``. With it, compatible
-patterns are accelerated automatically, preserving Python ``re`` semantics.
-A broken or incompatible backend raises an error instead of silently disabling
-acceleration.
+Without a compatible API, or on free-threaded Python, all patterns use Python
+``re``. With a compatible API, eligible patterns are accelerated automatically,
+as described in :ref:`pattern-acceleration`. A broken installed package or an
+incompatible API raises an error instead of silently disabling acceleration.
 
-To remove an existing backend, uninstall ``msgspec-pcre2``. Restart Python after
-adding or removing the backend. Already created matchers retain their original
-engine for their lifetime.
+Restart Python after changing the optional package. Existing matchers retain
+owned references to their original provider and compiled pattern.
+
+.. _pcre2 package: https://github.com/grtetrault/pcre2.py
 
 
 Optional Dependencies

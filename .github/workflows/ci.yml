@@ -16,14 +16,12 @@ on:
     paths:
     # Changes to the package itself
     - src/msgspec/**
-    - pcre2/**
     - pyproject.toml
     - setup.py
     - MANIFEST.in
     # Changes to CI execution
     - .github/workflows/*
     - .cibuildwheel.toml
-    - .cibuildwheel-pcre2.toml
     - .justfile
     - scripts/**
     # Changes to testing
@@ -59,14 +57,12 @@ jobs:
       fetch-latest-python: true
 
   test:
-    name: Test Python ${{ matrix.python-version }} on ${{ startsWith(matrix.os, 'macos-') && 'macOS' || startsWith(matrix.os, 'windows-') && 'Windows' || 'Linux' }}${{ matrix.pcre2 == '0' && ' (without PCRE2)' || '' }}
+    name: Test Python ${{ matrix.python-version }} on ${{ startsWith(matrix.os, 'macos-') && 'macOS' || startsWith(matrix.os, 'windows-') && 'Windows' || 'Linux' }}
     needs:
     - prepare
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read
-    env:
-      MSGSPEC_TEST_PCRE2: "${{ matrix.pcre2 }}"
     strategy:
       fail-fast: false
       matrix:
@@ -81,12 +77,6 @@ jobs:
         - "3.13"
         - "3.14"
         - "3.15"
-        pcre2:
-        - "1"
-        include:
-        - os: ubuntu-latest
-          python-version: "3.14"
-          pcre2: "0"
 
     steps:
     - name: Checkout code
@@ -113,13 +103,6 @@ jobs:
         MSGSPEC_COVERAGE: "true"
       run: just env-sync test
 
-    - name: Install optional native backend
-      if: matrix.pcre2 == '1'
-      env:
-        MSGSPEC_SANITIZE: "true"
-        MSGSPEC_COVERAGE: "true"
-      run: uv pip install --python "$(just env-path test)/bin/python" ./pcre2
-
     - name: Run tests with sanitizers
       env:
         PYTHONMALLOC: "malloc"
@@ -136,7 +119,7 @@ jobs:
     - name: Upload coverage artifacts
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
       with:
-        name: coverage-${{ matrix.python-version }}-${{ matrix.os }}-pcre2-${{ matrix.pcre2 }}
+        name: coverage-${{ matrix.python-version }}-${{ matrix.os }}
         path: |-
           coverage.xml
           _core.c.gcov
@@ -204,9 +187,6 @@ jobs:
 
     - name: Install testing dependencies
       run: just env-sync test
-
-    - name: Install optional native backend
-      run: uv pip install --python "$(just env-path test)/bin/python" ./pcre2
 
     - name: Run doctests
       run: just test-doc

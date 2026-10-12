@@ -48,7 +48,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-pcre2 = ["msgspec-pcre2==0.1.0"]
+pcre2 = ["pcre2>=0.7.1"]
 toml = [
   "tomli ; python_version < '3.11'",
   "tomli_w",
@@ -133,8 +133,6 @@ msgspec = [
 version_file = "src/msgspec/_version.py"
 parentdir_prefix_version = "msgspec-"
 
-[tool.uv.sources]
-msgspec-pcre2 = { path = "pcre2" }
 
 [tool.uv.config-settings]
 editable_mode = "compat"

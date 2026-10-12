@@ -65,9 +65,6 @@ jobs:
       if: inputs.run-static-analysis
       run: just hooks-check
 
-    - name: Check backend API headers
-      run: cmp src/msgspec/pattern_api.h pcre2/pattern_api.h
-
     - name: Build source distribution
       id: build-sdist
       run: |-
@@ -94,13 +91,3 @@ jobs:
       uses: ./.github/actions/latest-supported-python
       with:
         github-token: "${{ github.token }}"
-
-    - name: Build optional backend source distribution
-      run: uv build pcre2 --sdist --out-dir pcre2-dist
-
-    - name: Upload optional backend source distribution
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-      with:
-        name: pcre2-sdist
-        path: pcre2-dist/*.tar.gz
-        if-no-files-found: error
