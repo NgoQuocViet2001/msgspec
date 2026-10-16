@@ -545,6 +545,8 @@ typedef struct {
 #endif
     PyObject *astimezone;
     PyObject *re_compile;
+    PyObject *prepare_pattern;
+    PyObject *compile_pattern;
     uint8_t gc_cycle;
 } MsgspecState;
 
@@ -22823,6 +22825,8 @@ msgspec_clear(PyObject *m)
     Py_CLEAR(st->typing_typealiastype);
 #endif
     Py_CLEAR(st->astimezone);
+    Py_CLEAR(st->prepare_pattern);
+    Py_CLEAR(st->compile_pattern);
     Py_CLEAR(st->re_compile);
     return 0;
 }
@@ -22901,6 +22905,8 @@ msgspec_traverse(PyObject *m, visitproc visit, void *arg)
     Py_VISIT(st->uuid_safeuuid_unknown);
     Py_VISIT(st->DecimalType);
     Py_VISIT(st->astimezone);
+    Py_VISIT(st->prepare_pattern);
+    Py_VISIT(st->compile_pattern);
     Py_VISIT(st->re_compile);
     return 0;
 }
@@ -23090,6 +23096,8 @@ PyInit__core(void)
 
     temp_module = PyImport_ImportModule("msgspec._utils");
     if (temp_module == NULL) return NULL;
+    SET_REF(prepare_pattern, "_prepare_pattern");
+    SET_REF(compile_pattern, "_compile_pattern");
     SET_REF(concrete_types, "_CONCRETE_TYPES");
     SET_REF(get_type_hints, "get_type_hints");
     SET_REF(get_class_annotations, "get_class_annotations");
