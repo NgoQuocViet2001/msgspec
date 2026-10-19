@@ -27,12 +27,13 @@ The optional extra installs the external `pcre2 package`_::
 
     python -m pip install "msgspec[pcre2]"
 
-Acceleration requires a compatible versioned C API in that package. This API
-is proposed and is not present in the published pcre2 0.7.1 release. Installing
-that release therefore preserves Python ``re`` matching without acceleration.
+Acceleration requires ``pcre2._cy._MATCHER_API_v1`` from that package.
+The API is implemented in `pcre2.py pull request 30`_ and is not present in
+the published pcre2 0.7.1 release. Installing that release therefore preserves
+Python ``re`` matching without acceleration.
 
-Without a compatible API, or on free-threaded Python, all patterns use Python
-``re``. With a compatible API, eligible patterns are accelerated automatically,
+If the matcher API is absent, or on free-threaded Python, all patterns use
+Python ``re``. With a compatible API, eligible patterns are accelerated automatically,
 as described in :ref:`pattern-acceleration`. A broken installed package or an
 incompatible API raises an error instead of silently disabling acceleration.
 
@@ -40,6 +41,7 @@ Restart Python after changing the optional package. Existing matchers retain
 owned references to their original provider and compiled pattern.
 
 .. _pcre2 package: https://github.com/grtetrault/pcre2.py
+.. _pcre2.py pull request 30: https://github.com/grtetrault/pcre2.py/pull/30
 
 
 Optional Dependencies

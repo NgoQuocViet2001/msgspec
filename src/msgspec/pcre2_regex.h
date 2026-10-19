@@ -121,7 +121,7 @@ ms_pattern_compile(PyObject *pattern, PyObject *reference) {
     PyObject *compiled = NULL, *native = NULL, *error_type = NULL, *out = NULL;
     Pcre2MatcherAPI *api = PyCapsule_GetPointer(capsule, PCRE2_MATCHER_API_NAME);
     if (api == NULL) goto done;
-    if (api->abi_version != PCRE2_MATCHER_API_VERSION || api->struct_size != sizeof(Pcre2MatcherAPI) ||
+    if (api->abi_version != PCRE2_MATCHER_API_VERSION || api->struct_size < sizeof(Pcre2MatcherAPI) ||
         api->matcher_type == NULL || !PyType_Check(api->matcher_type) ||
         api->new_matcher == NULL || api->search == NULL) {
         PyErr_SetString(PyExc_ImportError, "Incompatible pcre2 matcher API");

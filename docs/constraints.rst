@@ -154,8 +154,9 @@ C API without a Python call or a Match object per accelerated value. Known
 native resource limits use the original Python ``re`` pattern; other errors
 propagate. The original pattern is retained in introspection and JSON Schema.
 
-Without a compatible API, or on free-threaded Python, all patterns use Python
-``re``. The proposed API is not available in published pcre2 0.7.1. See
+If the matcher API is absent, or on free-threaded Python, all patterns use
+Python ``re``. The C API implemented in pcre2.py pull request 30 is not available in
+published pcre2 0.7.1. See
 :ref:`install-without-pcre2` for installation details.
 
 

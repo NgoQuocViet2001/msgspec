@@ -186,6 +186,56 @@ def test_incompatible_backend_interface():
     )
 
 
+def test_extended_compatible_backend_interface(native):
+    run_python(
+        r"""
+        import ctypes
+        import gc
+        from typing import Annotated
+        import msgspec
+        from pcre2 import _cy
+
+        class API(ctypes.Structure):
+            _fields_ = [
+                ("version", ctypes.c_uint), ("size", ctypes.c_size_t),
+                ("type", ctypes.c_void_p), ("new_matcher", ctypes.c_void_p),
+                ("search", ctypes.c_void_p),
+            ]
+
+        class ExtendedAPI(ctypes.Structure):
+            _fields_ = [("prefix", API), ("reserved", ctypes.c_void_p)]
+
+        name = b"pcre2._cy._MATCHER_API_v1"
+        original_capsule = _cy._MATCHER_API_v1
+        get_pointer = ctypes.pythonapi.PyCapsule_GetPointer
+        get_pointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+        get_pointer.restype = ctypes.c_void_p
+        prefix = API.from_address(get_pointer(original_capsule, name))
+        extended = ExtendedAPI(prefix, None)
+        extended.prefix.size = ctypes.sizeof(extended)
+        capsule_new = ctypes.pythonapi.PyCapsule_New
+        capsule_new.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
+        capsule_new.restype = ctypes.py_object
+        _cy._MATCHER_API_v1 = capsule_new(ctypes.addressof(extended), name, None)
+
+        meta = msgspec.Meta(pattern="^[A-Z]{2}$")
+        assert any(
+            type(ref).__name__ == "_PatternMatcher" for ref in gc.get_referents(meta)
+        )
+        typ = Annotated[str, meta]
+        decoder = msgspec.json.Decoder(typ)
+        assert decoder.decode(b'"US"') == "US"
+        assert msgspec.convert("GB", type=typ) == "GB"
+        try:
+            decoder.decode(b'"usa"')
+        except msgspec.ValidationError:
+            pass
+        else:
+            raise AssertionError("Nonmatching input accepted")
+        """
+    )
+
+
 def test_optional_provider_lookup_errors():
     run_python(
         r"""
