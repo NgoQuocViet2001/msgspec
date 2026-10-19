@@ -2830,14 +2830,14 @@ class TestClassVar:
 
             class Ex(Struct):
                 __module__ = "not_a_loaded_module"
-                cv: "ClassVar[int]" = 1
+                cv: "ClassVar[int]" = 1  # noqa: F821
 
     def test_classvar_string_annotation_unhashable_module(self):
         with pytest.raises(TypeError, match="unhashable"):
 
             class Ex(Struct):
                 __module__ = []
-                cv: "ClassVar[int]" = 1
+                cv: "ClassVar[int]" = 1  # noqa: F821
 
     @pytest.mark.parametrize("default", ["", " = 1"])
     @pytest.mark.parametrize("annotation", ["typing.ClassVar", "typing.ClassVar[int]"])
