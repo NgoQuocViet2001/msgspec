@@ -84,34 +84,11 @@ def _race(mutate, check, *, mutators=1, checkers=4, iterations=5000):
 
 @pytest.fixture(scope="session")
 def run_concurrently():
-    """Run one function in several threads at once.
-
-    Usage::
-
-        def test_something(run_concurrently):
-            run_concurrently(lambda: msgspec.json.encode(obj), nthreads=8)
-    """
+    """Run one function in several threads at once."""
     return _run_concurrently
 
 
 @pytest.fixture(scope="session")
 def race():
-    """Run a ``check`` function in several threads while ``mutate`` runs.
-
-    Usage::
-
-        def test_something(race):
-            lst = [1, 2, 3]
-
-            def mutate():
-                lst.append(4)
-                lst.pop()
-
-            def check():
-                msgspec.json.encode(lst)
-
-            race(mutate, check)
-
-    See ``_race`` for the keyword arguments.
-    """
+    """Run a ``check`` function in several threads while ``mutate`` runs."""
     return _race
