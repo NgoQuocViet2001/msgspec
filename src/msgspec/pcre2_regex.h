@@ -3,8 +3,7 @@
 
 static int
 ms_python_pattern_match(PyObject *regex, PyObject *obj) {
-    MsgspecState *st = msgspec_get_global_state();
-    PyObject *res = PyObject_CallMethodOneArg(regex, st->str_search, obj);
+    PyObject *res = PyObject_CallMethod(regex, "search", "O", obj);
     if (res == NULL) return -1;
     int out = res != Py_None;
     Py_DECREF(res);
