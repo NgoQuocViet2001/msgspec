@@ -514,6 +514,8 @@ class TestStrConstraints:
             ("", ["", "test"], []),
             ("as", ["as", "ease", "ast", "pass"], ["", "nope"]),
             ("^pre[123]*$", ["pre1", "pre123"], ["apre1", "pre1two"]),
+            (r"^\w+$", ["ascii", "Москва", "é"], ["", "!", "a b"]),
+            ("^x$", ["x", "x\n"], ["ax", "x\n\n", "x\r\n"]),
         ],
     )
     def test_pattern(self, proto, pattern, good, bad):

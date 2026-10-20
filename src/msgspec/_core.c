@@ -515,6 +515,7 @@ typedef struct {
     PyObject *str___constraints__;
     PyObject *str_int;
     PyObject *str_is_safe;
+    PyObject *str_search;
     PyObject *UUIDType;
     PyObject *uuid_safeuuid_unknown;
     PyObject *DecimalType;
@@ -10677,7 +10678,8 @@ _ms_check_str_constraints(PyObject *obj, TypeNode *type, PathNode *path) {
     }
     if (type->types & MS_CONSTR_STR_REGEX) {
         PyObject *regex = TypeNode_get_constr_str_regex(type);
-        PyObject *res = PyObject_CallMethod(regex, "search", "O", obj);
+        MsgspecState *st = msgspec_get_global_state();
+        PyObject *res = PyObject_CallMethodOneArg(regex, st->str_search, obj);
         if (res == NULL) goto error;
         bool ok = (res != Py_None);
         Py_DECREF(res);
@@ -22950,6 +22952,7 @@ msgspec_clear(PyObject *m)
     Py_CLEAR(st->str___constraints__);
     Py_CLEAR(st->str_int);
     Py_CLEAR(st->str_is_safe);
+    Py_CLEAR(st->str_search);
     Py_CLEAR(st->UUIDType);
     Py_CLEAR(st->uuid_safeuuid_unknown);
     Py_CLEAR(st->DecimalType);
@@ -23321,6 +23324,7 @@ PyInit__core(void)
     CACHED_STRING(str___constraints__, "__constraints__");
     CACHED_STRING(str_int, "int");
     CACHED_STRING(str_is_safe, "is_safe");
+    CACHED_STRING(str_search, "search");
 
     /* Initialize the Struct Type */
     if (PyState_AddModule(m, &msgspecmodule) < 0) {
