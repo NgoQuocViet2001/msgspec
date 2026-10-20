@@ -61,7 +61,11 @@ def test_struct_renamed_field_lookup(decode, key):
     assert out.f2 == -1
 
 
-@pytest.mark.parametrize("unknown", ["f01", "f0\x00", "é" * 32768])
+@pytest.mark.parametrize(
+    "unknown",
+    ["f01", "f0\x00", "é" * 32768],
+    ids=["prefix", "embedded-nul", "long-unicode"],
+)
 @pytest.mark.parametrize("forbid", [False, True])
 def test_struct_unknown_field_lookup(decode, unknown, forbid):
     cls = msgspec.defstruct(
