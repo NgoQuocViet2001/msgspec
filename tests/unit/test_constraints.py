@@ -514,7 +514,7 @@ class TestStrConstraints:
             ("", ["", "test"], []),
             ("as", ["as", "ease", "ast", "pass"], ["", "nope"]),
             ("^pre[123]*$", ["pre1", "pre123"], ["apre1", "pre1two"]),
-            (r"^\w+$", ["ascii", "Москва", "é"], ["", "!", "a b"]),
+            (r"^\w+$", ["ascii", "\u03b1\u03b2\u03b3", "é"], ["", "!", "a b"]),
             ("^x$", ["x", "x\n"], ["ax", "x\n\n", "x\r\n"]),
         ],
     )
