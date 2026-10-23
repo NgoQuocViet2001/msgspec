@@ -3,6 +3,7 @@ import gc
 import math
 import re
 import sys
+from functools import partial
 from typing import Annotated, Union
 
 import pytest
@@ -518,19 +519,22 @@ class TestStrConstraints:
             ("^x$", ["x", "x\n"], ["ax", "x\n\n", "x\r\n"]),
         ],
     )
-    def test_pattern(self, proto, pattern, good, bad):
+    @pytest.mark.parametrize("use_decoder", [False, True])
+    def test_pattern(self, proto, pattern, good, bad, use_decoder):
         class Ex(msgspec.Struct):
             x: Annotated[str, Meta(pattern=pattern)]
 
-        dec = proto.Decoder(Ex)
+        decode = (
+            proto.Decoder(Ex).decode if use_decoder else partial(proto.decode, type=Ex)
+        )
 
         for x in good:
-            assert dec.decode(proto.encode(Ex(x))).x == x
+            assert decode(proto.encode(Ex(x))).x == x
 
         err_msg = f"Expected `str` matching regex {pattern!r} - at `$.x`"
         for x in bad:
             with pytest.raises(msgspec.ValidationError) as rec:
-                dec.decode(proto.encode(Ex(x)))
+                decode(proto.encode(Ex(x)))
             assert str(rec.value) == err_msg
 
     @pytest.mark.parametrize(
